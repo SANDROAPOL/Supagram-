@@ -1,3 +1,8 @@
+import Image from "next/image";
+import { HeartIcon } from "./Hearticon";
+import type { Post } from "../mocks/posts";
+import { getTimeAgo } from "../utils/time";
+
 function PostCard({ post, onLike }: { post: Post; onLike: (id: number | string) => void }) {
   return (
     <article className="bg-card-bg border border-border rounded-xl overflow-hidden shadow-sm">

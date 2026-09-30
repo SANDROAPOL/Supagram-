@@ -1,4 +1,4 @@
-function HeartIcon({ filled }: { filled: boolean }) {
+export function HeartIcon({ filled }: { filled: boolean }) {
   if (filled) {
     return (
       <svg
