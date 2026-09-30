@@ -1,17 +1,25 @@
 "use client";
-
+  
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import PostCard from "./components/Postcard";
 import type { Post } from "./mocks/posts";
 import { supabase } from "./lib/supabase";
 
 export default function Home() {
+  const router = useRouter();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadPosts() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.replace("/auth/login");
+        return;
+      }
+
       const { data, error } = await supabase
         .from("posts")
         .select("*")
@@ -26,7 +34,7 @@ export default function Home() {
     }
 
     void loadPosts();
-  }, []);
+  }, [router]);
 
   function toggleLike(id: Post["id"]) {
     setPosts((current) =>
