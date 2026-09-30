@@ -1,163 +1,66 @@
 "use client";
 
-import Image from "next/image";
+
 import { useEffect, useState } from "react";
-import { getTimeAgo } from "./utils/time";
-import { type Post } from "./mocks/posts";
-import { supabase } from "./utils/supabase";
-
-const defaultAvatar =
-  "https://sqlkltbinziklapgzwif.supabase.co/storage/v1/object/public/Supagram/th.webp";
-
-function HeartIcon({ filled }: { filled: boolean }) {
-  if (filled) {
-    return (
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        className="w-7 h-7 text-red-500"
-      >
-        <path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
-      </svg>
-    );
-  }
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      strokeWidth={1.5}
-      stroke="currentColor"
-      className="w-7 h-7"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
-      />
-    </svg>
-  );
-}
-
-function PostCard({ post, onLike }: { post: Post; onLike: (id: number | string) => void }) {
-  return (
-    <article className="bg-card-bg border border-border rounded-xl overflow-hidden shadow-sm">
-      {/* Header con usuario y avatar */}
-      <div className="flex items-center gap-3 p-4">
-        <div className="relative w-10 h-10 rounded-full overflow-hidden ring-2 ring-primary">
-          <Image
-            src={post.user?.avatar || 'https://sqlkltbinziklapgzwif.supabase.co/storage/v1/object/public/Supagram/th.webp'}
-            alt={post.user?.username || 'default user'}
-            fill
-            className="object-cover"
-          />
-        </div>
-        <div className="flex flex-col">
-          <span className="font-semibold text-foreground">{post.user?.username || "Drax"}</span>
-          <span className="text-xs text-foreground/50">{getTimeAgo(post.created_at)}</span>
-        </div>
-      </div>
-
-      {/* Imagen del post */}
-      <div className="relative w-full aspect-square">
-        <Image
-          src={post.image_url}
-          alt={`Post de ${post.user?.username || "Drax"}`}
-          fill
-          className="object-cover"
-        />
-      </div>
-
-      {/* Acciones, likes y descripción */}
-      <div className="px-4 pb-4 pt-3">
-        <div className="flex items-center">
-          <button
-            onClick={() => onLike(post.id)}
-            className="hover:scale-110 transition-transform active:scale-95"
-            aria-label={post.isLiked ? "Quitar like" : "Dar like"}
-          >
-            <HeartIcon filled={post.isLiked} />
-          </button>
-        </div>
-
-        <p className="mt-2 text-sm font-semibold text-foreground">
-          {post.likes.toLocaleString()} likes
-        </p>
-
-        <p className="mt-2 leading-5 text-foreground">
-          <span className="font-semibold">{post.user?.username || "Drax"}</span>{" "}
-          <span className="text-foreground/80">{post.caption}</span>
-        </p>
-      </div>
-    </article>
-  );
-}
+import PostCard from "./components/Postcard";
+import type { Post } from "./mocks/posts";
+import { supabase } from "./lib/supabase";
 
 export default function Home() {
   const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function getPosts() {
+    async function loadPosts() {
       const { data, error } = await supabase
         .from("posts")
         .select("*")
         .order("created_at", { ascending: false });
-        
 
       if (error) {
         console.error("No se pudieron cargar los posts", error);
-        return;
+      } else {
+        setPosts((data ?? []) as Post[]);
       }
-
-      setPosts(
-        (data ?? []).map((post) => ({
-          ...post,
-          user: {
-            username: "Drax",
-            avatar: defaultAvatar,
-          },
-          created_at: new Date(post.created_at),
-          isLiked: false,
-        })) as Post[]
-      );
+      setLoading(false);
     }
 
-    getPosts();
+    void loadPosts();
   }, []);
 
-  const handleLike = (postId: number | string) => {
-    setPosts((prevPosts) =>
-      prevPosts.map((post) =>
-        post.id === postId
+  function toggleLike(id: Post["id"]) {
+    setPosts((current) =>
+      current.map((post) =>
+        post.id === id
           ? {
               ...post,
               isLiked: !post.isLiked,
-              likes: post.isLiked ? post.likes - 1 : post.likes + 1,
+              likes: post.likes + (post.isLiked ? -1 : 1),
             }
-          : post
-      )
+          : post,
+      ),
     );
-  };
+  }
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-card-bg border-b border-border">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-center">
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-          Supagram ☔
+      <header className="sticky top-0 z-40 border-b border-border bg-card-bg">
+        <div className="mx-auto flex max-w-lg items-center justify-center px-4 py-3">
+          <h1 className="bg-gradient-to-r from-primary to-accent bg-clip-text text-xl font-bold text-transparent">
+            Suplatzigram
           </h1>
         </div>
       </header>
-
-      {/* Feed de posts */}
-      <main className="max-w-lg mx-auto px-4 py-6">
-        <div className="flex flex-col gap-6">
-          {posts.map((post) => (
-            <PostCard key={post.id} post={post} onLike={handleLike} />
-          ))}
-        </div>
+      <main className="mx-auto flex max-w-lg flex-col gap-4 p-3 pb-24">
+        {loading ? (
+          <p className="py-12 text-center text-sm text-foreground/60">Cargando publicaciones…</p>
+        ) : posts.length ? (
+          posts.map((post) => <PostCard key={post.id} post={post} onLike={toggleLike} />)
+        ) : (
+          <p className="py-12 text-center text-sm text-foreground/60">
+            Todavía no hay publicaciones para mostrar.
+          </p>
+        )}
       </main>
     </div>
   );

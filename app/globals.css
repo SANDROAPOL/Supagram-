@@ -8,6 +8,8 @@
   --accent: #3ecf8e;
   --card-bg: #ffffff;
   --border: #e5e5e5;
+  --font-geist-sans: Arial, Helvetica, sans-serif;
+  --font-geist-mono: "Courier New", monospace;
 }
 
 @theme inline {

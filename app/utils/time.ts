@@ -1,4 +1,7 @@
-export function getTimeAgo(date: Date): string {
+export function getTimeAgo(value: Date | string | number | null | undefined): string {
+  const date = value instanceof Date ? value : new Date(value ?? NaN);
+  if (Number.isNaN(date.getTime())) return "fecha desconocida";
+
   const now = new Date();
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
   
