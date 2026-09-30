@@ -1,175 +1,272 @@
 "use client";
 
+import { useState, useRef } from "react";
 import Image from "next/image";
-import { useEffect, useState } from "react";
-import { getTimeAgo } from "../utils/time";
-
-import type { Post } from "../mocks/posts";
 import { supabase } from "../utils/supabase";
 
-function HeartIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      className="w-6 h-6 text-red-500"
-    >
-      <path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
-    </svg>
-  );
-}
+export default function CreatePage() {
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [caption, setCaption] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-function Modal({
-  post,
-  onClose,
-}: {
-  post: Post;
-  onClose: () => void;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm sm:p-6"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Foto de ${post.user?.username || "Drax"}`}
-    >
-      <div
-        className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-card-bg shadow-2xl sm:max-h-[calc(100dvh-3rem)]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Botón cerrar */}
-        <button
-          onClick={onClose}
-          className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
-          aria-label="Cerrar"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={2}
-            stroke="currentColor"
-            className="w-5 h-5"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        </button>
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
-        {/* Header con usuario */}
-        <div className="order-1 flex items-center gap-3 border-b border-border bg-card-bg p-4">
-          <div className="relative w-10 h-10 rounded-full overflow-hidden ring-2 ring-primary">
-            <Image
-              src={post.user?.avatar || 'https://sqlkltbinziklapgzwif.supabase.co/storage/v1/object/public/Supagram/th.webp'}
-              alt={post.user?.username || 'Drax'}
-              fill
-              className="object-cover"
-            />
-          </div>
-          <div className="flex flex-col">
-            <span className="font-semibold text-foreground">{post.user?.username || 'Drax'}</span>
-            <span className="text-xs text-foreground/50">{getTimeAgo(new Date(post.created_at))}</span>
-          </div>
-        </div>
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
-        {/* Imagen */}
-        <div className="relative order-2 aspect-square w-full shrink-0 bg-black">
-          <Image
-            src={post.image_url}
-            alt={`Post de ${post.user?.username || 'Drax'}`}
-            fill
-            className="object-contain"
-            sizes="(max-width: 1024px) 100vw, calc(100vw - 320px)"
-          />
-        </div>
+  const uploadAndCreatePost = async (file: File) => {
+    const userId = "11111111-1111-1111-1111-111111111111";
 
-        {/* Likes y caption */}
-        <div className="order-3 overflow-y-auto bg-card-bg p-4">
-          <div className="flex items-center gap-2">
-            <HeartIcon />
-            <span className="text-lg font-bold text-foreground">
-              {post.likes.toLocaleString()} likes
-            </span>
-          </div>
-          <p className="mt-3 text-sm leading-6 text-foreground">
-            <span className="font-semibold">{post.user?.username || 'Drax'}</span>{" "}
-            <span className="text-foreground/80">{post.caption}</span>
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
+    // 1️⃣ Preparar nombre del archivo
+    const fileExt = file.name.split(".").pop();
+    const fileName = `${file.name}-${Date.now()}.${fileExt}`;
+    const filePath = `images/${fileName}`;
 
-export default function RankPage() {
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [posts, setPosts] = useState<Post[]>([]);
+    // 2️⃣ Subir al bucket "images"
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from("Supagram")
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
 
-   useEffect(() => {
-    async function getPosts() {
-      const { data: posts } = await supabase
-        .from('posts')
-        .select()
-        .order('likes', { ascending: false })
-
-      if (posts) {
-        setPosts(posts as Post[])
-      }
+    if (uploadError) {
+      console.error("❌ Error al subir imagen:", uploadError);
+      throw uploadError;
     }
 
-    getPosts()
-}, [])
+    // 3️⃣ Obtener URL pública
+    const { data: urlData } = supabase.storage
+      .from("Supagram")
+      .getPublicUrl(filePath);
+
+    const publicUrl = urlData.publicUrl;
+
+    console.log("📸 Imagen subida:", publicUrl);
+
+    // 4️⃣ Crear el post en la tabla posts
+    const { data: postData, error: postError } = await supabase
+      .from("posts")
+      .insert({
+        user_id: userId,
+        image_url: publicUrl,
+        caption: caption,
+        likes: 0,
+      })
+      .select("*");
+
+    if (postError) {
+      console.error("❌ Error creando el post:", postError);
+      throw postError;
+    }
+
+    console.log("🆕 Post creado:", postData);
+
+    return {
+      uploadedImageUrl: publicUrl,
+      newPost: postData,
+    };
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!imageFile) {
+      setMessage({ type: "error", text: "Por favor selecciona una imagen" });
+      return;
+    }
+
+    setIsLoading(true);
+    setMessage(null);
+
+    try {
+      await uploadAndCreatePost(imageFile);
+
+      // Éxito
+      setMessage({ type: "success", text: "¡Post creado exitosamente!" });
+      setImageFile(null);
+      setImagePreview(null);
+      setCaption("");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Error al crear el post",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-card-bg border-b border-border">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-center">
+        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-center">
           <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            Ranking
+            Crear Post
           </h1>
         </div>
       </header>
 
-      {/* Grid de posts */}
-      <main className="max-w-2xl mx-auto p-2">
-        <div className="grid grid-cols-3 gap-1">
-          {[...posts].sort((a, b) => b.likes - a.likes).map((post, index) => (
-            <button
-              key={post.id}
-              onClick={() => setSelectedPost(post)}
-              className="relative aspect-square overflow-hidden group"
-            >
-              <Image
-                src={post.image_url}
-                alt={`Post con ${post.likes} likes`}
-                fill
-                className="object-cover transition-transform group-hover:scale-105"
-              />
-              <span className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-sm font-bold text-white shadow-md">
-                {index}
-              </span>
-              {/* Overlay con likes al hover */}
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
-                <HeartIcon />
-                <span className="text-white font-semibold">
-                  {post.likes.toLocaleString()}
-                </span>
+      {/* Formulario */}
+      <main className="max-w-lg mx-auto px-4 py-8">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+          {/* Área de carga de imagen */}
+          <div className="flex flex-col gap-2">
+            {imagePreview ? (
+              <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-card-bg border border-border">
+                <Image
+                  src={imagePreview}
+                  alt="Preview"
+                  fill
+                  className="object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={handleRemoveImage}
+                  className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+                  aria-label="Eliminar imagen"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
               </div>
-            </button>
-          ))}
-        </div>
-      </main>
+            ) : (
+              <label
+                htmlFor="image-upload"
+                className="flex flex-col items-center justify-center gap-3 aspect-square w-full rounded-xl border-2 border-dashed border-border bg-card-bg cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors"
+              >
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                    className="w-8 h-8 text-primary"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z"
+                    />
+                  </svg>
+                </div>
+                <span className="text-foreground/60 text-sm">
+                  Haz clic para seleccionar una imagen
+                </span>
+              </label>
+            )}
+            
+            <input
+              ref={fileInputRef}
+              id="image-upload"
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              className="hidden"
+            />
+          </div>
 
-      {/* Modal */}
-      {selectedPost && (
-        <Modal post={selectedPost} onClose={() => setSelectedPost(null)} />
-      )}
+          {/* Caption */}
+          <div className="flex flex-col gap-2">
+            <textarea
+              id="caption"
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              placeholder="Escribe algo sobre tu foto..."
+              rows={3}
+              className="w-full px-4 py-3 rounded-xl bg-card-bg border border-border text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+            />
+          </div>
+
+          {/* Mensaje de estado */}
+          {message && (
+            <div
+              className={`px-4 py-3 rounded-xl text-sm ${
+                message.type === "success"
+                  ? "bg-green-500/10 text-green-500 border border-green-500/20"
+                  : "bg-red-500/10 text-red-500 border border-red-500/20"
+              }`}
+            >
+              {message.text}
+            </div>
+          )}
+
+          {/* Botón de enviar */}
+          <button
+            type="submit"
+            disabled={isLoading || !imageFile}
+            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-primary to-accent text-white font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isLoading ? (
+              <>
+                <svg
+                  className="animate-spin h-5 w-5"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                Publicando...
+              </>
+            ) : (
+              "Publicar"
+            )}
+          </button>
+        </form>
+      </main>
     </div>
   );
 }

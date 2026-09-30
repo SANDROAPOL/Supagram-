@@ -103,6 +103,7 @@ export default function Home() {
         .from("posts")
         .select("*")
         .order("created_at", { ascending: false });
+        
 
       if (error) {
         console.error("No se pudieron cargar los posts", error);

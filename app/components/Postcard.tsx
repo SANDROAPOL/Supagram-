@@ -1,0 +1,53 @@
+function PostCard({ post, onLike }: { post: Post; onLike: (id: number | string) => void }) {
+  return (
+    <article className="bg-card-bg border border-border rounded-xl overflow-hidden shadow-sm">
+      {/* Header con usuario y avatar */}
+      <div className="flex items-center gap-3 p-4">
+        <div className="relative w-10 h-10 rounded-full overflow-hidden ring-2 ring-primary">
+          <Image
+            src={post.user?.avatar || 'https://sqlkltbinziklapgzwif.supabase.co/storage/v1/object/public/Supagram/th.webp'}
+            alt={post.user?.username || 'default user'}
+            fill
+            className="object-cover"
+          />
+        </div>
+        <div className="flex flex-col">
+          <span className="font-semibold text-foreground">{post.user?.username || "Drax"}</span>
+          <span className="text-xs text-foreground/50">{getTimeAgo(post.created_at)}</span>
+        </div>
+      </div>
+
+      {/* Imagen del post */}
+      <div className="relative w-full aspect-square">
+        <Image
+          src={post.image_url}
+          alt={`Post de ${post.user?.username || "Drax"}`}
+          fill
+          className="object-cover"
+        />
+      </div>
+
+      {/* Acciones, likes y descripción */}
+      <div className="px-4 pb-4 pt-3">
+        <div className="flex items-center">
+          <button
+            onClick={() => onLike(post.id)}
+            className="hover:scale-110 transition-transform active:scale-95"
+            aria-label={post.isLiked ? "Quitar like" : "Dar like"}
+          >
+            <HeartIcon filled={post.isLiked} />
+          </button>
+        </div>
+
+        <p className="mt-2 text-sm font-semibold text-foreground">
+          {post.likes.toLocaleString()} likes
+        </p>
+
+        <p className="mt-2 leading-5 text-foreground">
+          <span className="font-semibold">{post.user?.username || "Drax"}</span>{" "}
+          <span className="text-foreground/80">{post.caption}</span>
+        </p>
+      </div>
+    </article>
+  );
+}
