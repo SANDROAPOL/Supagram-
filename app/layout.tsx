@@ -3,8 +3,8 @@ import "./globals.css";
 import BottomNav from "./components/BottomNav";
 
 export const metadata: Metadata = {
-  title: "Suplatzigram",
-  description: "App inspirada en Instagram - Curso de Supabase de Platzi",
+  title: "Supagram",
+  description: "App inspirada en Instagram - Curso de Supabase de Supagram",
 };
 
 export default function RootLayout({

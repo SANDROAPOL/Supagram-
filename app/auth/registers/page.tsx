@@ -2,14 +2,55 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
 export default function RegisterPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
+  const [usernameError, setUsernameError] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  const validateUsername = (value: string) => {
+    const regex = /^[a-zA-Z0-9_]+$/;
+    if (!value) {
+      return "El nombre de usuario es requerido";
+    }
+    if (value.length < 3) {
+      return "Mínimo 3 caracteres";
+    }
+    if (value.length > 20) {
+      return "Máximo 20 caracteres";
+    }
+    if (!regex.test(value)) {
+      return "Solo letras, números y guión bajo";
+    }
+    return "";
+  };
+
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.toLowerCase();
+    setUsername(value);
+    setUsernameError(validateUsername(value));
+  };
+
+  const checkUsernameAvailable = async (username: string): Promise<boolean> => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("username", username)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data === null;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,21 +63,46 @@ export default function RegisterPage() {
       return;
     }
 
+    const usernameValidation = validateUsername(username);
+    if (usernameValidation) {
+      setMessage({ type: "error", text: usernameValidation });
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const { error } = await supabase.auth.signUp({
+      const isAvailable = await checkUsernameAvailable(username);
+      if (!isAvailable) {
+        setMessage({ type: "error", text: "Este nombre de usuario ya está en uso" });
+        return;
+      }
+
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        // Optional
+        options: {
+          data: {
+            username,
+            role: "user",
+          },
+        },
       });
 
       if (error) throw error;
 
-      setMessage({ 
-        type: "success", 
-        text: "¡Registro exitoso! Revisa tu correo para confirmar tu cuenta." 
+      setMessage({
+        type: "success",
+        text: data.session
+          ? "¡Registro exitoso! Ya puedes iniciar sesión."
+          : "Cuenta creada. Confirma tu correo antes de iniciar sesión; revisa también la carpeta de spam.",
       });
       setEmail("");
+      setUsername("");
       setPassword("");
       setConfirmPassword("");
+
+      if (data.session) router.replace("/");
     } catch (error) {
       setMessage({
         type: "error",
@@ -52,14 +118,32 @@ export default function RegisterPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-            Suplatzigram
+          <h1 className="text-3xl font-bold bg-linear-to-r from-primary to-accent bg-clip-text text-transparent">
+            Supagram
           </h1>
           <p className="text-foreground/60 mt-2">Crea tu cuenta</p>
         </div>
 
         {/* Formulario */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <input
+              type="text"
+              value={username}
+              onChange={handleUsernameChange}
+              placeholder="Nombre de usuario"
+              required
+              minLength={3}
+              maxLength={20}
+              className={`w-full px-4 py-3 rounded-xl bg-card-bg border text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 ${
+                usernameError ? "border-red-500" : "border-border"
+              }`}
+            />
+            {usernameError && (
+              <span className="text-red-500 text-xs px-1">{usernameError}</span>
+            )}
+          </div>
+
           <input
             type="email"
             value={email}
@@ -105,7 +189,7 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-primary to-accent text-white font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-3 px-4 rounded-xl bg-linear-to-r from-primary to-accent text-white font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? "Registrando..." : "Registrarse"}
           </button>

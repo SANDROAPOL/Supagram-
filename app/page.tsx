@@ -55,7 +55,7 @@ export default function Home() {
       <header className="sticky top-0 z-40 border-b border-border bg-card-bg">
         <div className="mx-auto flex max-w-lg items-center justify-center px-4 py-3">
           <h1 className="bg-gradient-to-r from-primary to-accent bg-clip-text text-xl font-bold text-transparent">
-            Suplatzigram
+            Supagram
           </h1>
         </div>
       </header>
