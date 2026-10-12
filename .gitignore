@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# local recovery archive; never include in the app or Git
+/.local-archive/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

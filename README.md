@@ -9,14 +9,18 @@ Repositorio del frontend para el **Curso de Supabase de Supagram**. Una aplicaci
 
 ## Comenzar
 
-Instala las dependencias e inicia el servidor de desarrollo:
+La aplicación activa está en la raíz del repositorio. Desde `C:\Supagram`, instala
+las dependencias e inicia el servidor:
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
 Abre [http://localhost:3000](http://localhost:3000) en tu navegador.
+
+La copia antigua recuperada se conserva en `.local-archive/supabase-fundamentos-legacy`;
+no la uses para iniciar la aplicación.
 
 ## Recursos
 

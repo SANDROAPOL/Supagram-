@@ -1,26 +1,39 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { supabase } from "../lib/supabase";
+import Link from "next/link";
 
 export default function CreatePage() {
+  const [userId, setUserId] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        setUserId(user.id);
+      }
+      setIsCheckingAuth(false);
+    };
+
+    checkAuth();
+  }, []);
+
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size > 5 * 1024 * 1024) {
-        setMessage({ type: 'error', text: 'Selecciona una imagen JPG, PNG, WebP o GIF de hasta 5 MB.' });
-        e.target.value = '';
-        return;
-      }
-      setMessage(null);
       setImageFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -39,22 +52,16 @@ export default function CreatePage() {
   };
 
   const uploadAndCreatePost = async (file: File) => {
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-    if (userError) {
-      throw userError;
-    }
-
-    if (!user) {
-      throw new Error("Inicia sesión para poder publicar una foto.");
+    if(!userId) {
+      throw new Error("No hay usuario autenticado")
     }
 
     // 1️⃣ Preparar nombre del archivo
     const fileExt = file.name.split(".").pop();
-    const fileName = `${user.id}-${crypto.randomUUID()}.${fileExt}`;
-    const filePath = `posts/${fileName}`;
+    const fileName = `${file.name}-${Date.now()}.${fileExt}`;
+    const filePath = `images/${fileName}`;
 
-    // 2️⃣ Subir al bucket "images"
+    // 2️⃣ Subir al bucket "Supagram"
     const { error: uploadError } = await supabase.storage
       .from("Supagram")
       .upload(filePath, file, {
@@ -76,19 +83,18 @@ export default function CreatePage() {
 
     console.log("📸 Imagen subida:", publicUrl);
 
-    // 4️⃣ Crear el post en la tabla posts_new
+    // 4️⃣ Crear el post en la tabla posts
     const { data: postData, error: postError } = await supabase
       .from("posts")
       .insert({
-        user_id: user.id,
+        user_id: userId,
         image_url: publicUrl,
-        caption: caption.trim(),
+        caption: caption,
         likes: 0,
       })
       .select("*");
 
     if (postError) {
-      await supabase.storage.from("Supagram").remove([filePath]);
       console.error("❌ Error creando el post:", postError);
       throw postError;
     }
@@ -126,26 +132,50 @@ export default function CreatePage() {
     } catch (error) {
       setMessage({
         type: "error",
-        text: error instanceof Error ? error.message : typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string' ? error.message : "Error al crear el post",
+        text: error instanceof Error ? error.message : "Error al crear el post",
       });
     } finally {
       setIsLoading(false);
     }
   };
 
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-foreground/60">Cargando...</div>
+      </div>
+    );
+  }
+
+    if (!userId) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="text-center">
+          <p className="text-foreground/60 mb-4">Debes iniciar sesión para crear posts</p>
+          <Link
+            href="/auth/login"
+            className="text-primary hover:underline"
+          >
+            Iniciar sesión
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-card-bg border-b border-border">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-center">
-          <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+          <h1 className="text-xl font-bold bg-linear-to-r from-primary to-accent bg-clip-text text-transparent">
             Crear Post
           </h1>
         </div>
       </header>
 
       {/* Formulario */}
-      <main className="max-w-lg mx-auto px-4 py-8 pb-24">
+      <main className="max-w-lg mx-auto px-4 py-8">
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
           {/* Área de carga de imagen */}
           <div className="flex flex-col gap-2">
@@ -215,7 +245,7 @@ export default function CreatePage() {
               ref={fileInputRef}
               id="image-upload"
               type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
+              accept="image/*"
               onChange={handleImageChange}
               className="hidden"
             />
@@ -228,7 +258,6 @@ export default function CreatePage() {
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
               placeholder="Escribe algo sobre tu foto..."
-              aria-label="Descripción de la publicación"
               rows={3}
               className="w-full px-4 py-3 rounded-xl bg-card-bg border border-border text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
             />
@@ -244,7 +273,6 @@ export default function CreatePage() {
               }`}
             >
               {message.text}
-              {message.type === 'success' && <a href="/" className="block mt-2 underline">Ver publicación en el inicio</a>}
             </div>
           )}
 
@@ -252,7 +280,7 @@ export default function CreatePage() {
           <button
             type="submit"
             disabled={isLoading || !imageFile}
-            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-primary to-accent text-white font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full py-3 px-4 rounded-xl bg-linear-to-r from-primary to-accent text-white font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isLoading ? (
               <>

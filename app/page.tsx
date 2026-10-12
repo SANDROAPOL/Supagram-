@@ -1,74 +1,110 @@
 "use client";
-  
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import PostCard from "./components/Postcard";
-import type { Post } from "./mocks/posts";
 import { supabase } from "./lib/supabase";
+import type { Post } from "./mocks/posts";
 
 export default function Home() {
-  const router = useRouter();
   const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const handleLike = (postId: number | string) => {
+    setPosts((prevPosts) =>
+      prevPosts.map((post) =>
+        post.id === postId
+          ? {
+              ...post,
+              isLiked: !post.isLiked,
+              likes: post.isLiked ? post.likes - 1 : post.likes + 1,
+            }
+          : post
+      )
+    );
+  };
 
   useEffect(() => {
-    async function loadPosts() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.replace("/auth/login");
-        return;
-      }
-
-      const { data, error } = await supabase
+    const fetchPosts = async () => {
+      // 1. Obtener posts
+      const { data: postsData, error: postsError } = await supabase
         .from("posts")
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error("No se pudieron cargar los posts", error);
-      } else {
-        setPosts((data ?? []) as Post[]);
+      if (postsError) {
+        console.error("Error al obtener los posts:", postsError);
+        return;
       }
-      setLoading(false);
-    }
 
-    void loadPosts();
-  }, [router]);
+      // 2. Obtener IDs únicos de usuarios
+      const postRows = postsData ?? [];
+      const userIds = [...new Set(postRows.map((post: { user_id: string }) => post.user_id))];
 
-  function toggleLike(id: Post["id"]) {
-    setPosts((current) =>
-      current.map((post) =>
-        post.id === id
-          ? {
-              ...post,
-              isLiked: !post.isLiked,
-              likes: post.likes + (post.isLiked ? -1 : 1),
-            }
-          : post,
-      ),
-    );
-  }
+      // 3. Buscar profiles de esos usuarios
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, username, avatar_url")
+        .in("id", userIds);
+
+      if (profilesError) {
+        console.error("Error al obtener los perfiles:", profilesError);
+        return;
+      }
+
+      // 4. Crear mapa de profiles por ID
+      const profilesMap = new Map(
+        (profilesData ?? []).map(
+          (profile: { id: string; username: string | null; avatar_url: string | null }) => [
+            profile.id,
+            { username: profile.username, avatar_url: profile.avatar_url },
+          ] as const
+        )
+      );
+
+      // 5. Combinar posts con profiles
+      const postsWithProfiles: Post[] = postRows.map((post: {
+        id: number | string;
+        user_id: string;
+        image_url: string;
+        caption: string;
+        likes: number;
+        created_at: string;
+      }) => {
+        const profile = profilesMap.get(post.user_id);
+
+        return {
+        ...post,
+          user: {
+            username: profile?.username || "Drax",
+            avatar: profile?.avatar_url || "https://sqlkltbinziklapgzwif.supabase.co/storage/v1/object/public/Supagram/th.webp",
+          },
+          isLiked: false,
+        };
+      });
+
+      setPosts(postsWithProfiles);
+    };
+
+    fetchPosts();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b border-border bg-card-bg">
-        <div className="mx-auto flex max-w-lg items-center justify-center px-4 py-3">
-          <h1 className="bg-gradient-to-r from-primary to-accent bg-clip-text text-xl font-bold text-transparent">
+      {/* Header */}
+      <header className="sticky top-0 z-50 bg-card-bg border-b border-border">
+        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-center">
+          <h1 className="text-2xl font-bold bg-linear-to-r from-primary to-accent bg-clip-text text-transparent">
             Supagram
           </h1>
         </div>
       </header>
-      <main className="mx-auto flex max-w-lg flex-col gap-4 p-3 pb-24">
-        {loading ? (
-          <p className="py-12 text-center text-sm text-foreground/60">Cargando publicaciones…</p>
-        ) : posts.length ? (
-          posts.map((post) => <PostCard key={post.id} post={post} onLike={toggleLike} />)
-        ) : (
-          <p className="py-12 text-center text-sm text-foreground/60">
-            Todavía no hay publicaciones para mostrar.
-          </p>
-        )}
+
+      {/* Feed de posts */}
+      <main className="max-w-lg mx-auto px-4 py-6">
+        <div className="flex flex-col gap-6">
+          {posts.map((post) => (
+            <PostCard key={post.id} post={post} onLike={handleLike} />
+          ))}
+        </div>
       </main>
     </div>
   );

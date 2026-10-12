@@ -10,6 +10,7 @@ import { supabase } from "../lib/supabase";
 export default function RankPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadPosts() {
@@ -20,10 +21,54 @@ export default function RankPage() {
 
       if (error) {
         console.error("No se pudieron cargar los posts del ranking", error);
+        setLoadError("No se pudieron cargar las publicaciones.");
         return;
       }
 
-      setPosts((data ?? []) as Post[]);
+      const postRows = (data ?? []) as Array<
+        Omit<Post, "user" | "isLiked"> & { user_id: string }
+      >;
+      const userIds = [...new Set(postRows.map((post) => post.user_id))];
+
+      if (userIds.length === 0) {
+        setPosts([]);
+        return;
+      }
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, username, avatar_url")
+        .in("id", userIds);
+
+      if (profilesError) {
+        console.error("No se pudieron cargar los perfiles del ranking", profilesError);
+        setLoadError("No se pudieron cargar los perfiles de las publicaciones.");
+        return;
+      }
+
+      const profilesById = new Map(
+        (profiles ?? []).map(
+          (profile: { id: string; username: string | null; avatar_url: string | null }) => [
+            profile.id,
+            profile,
+          ] as const
+        )
+      );
+
+      setPosts(
+        postRows.map((post) => {
+          const profile = profilesById.get(post.user_id);
+
+          return {
+            ...post,
+            user: {
+              username: profile?.username || "Usuario",
+              avatar: profile?.avatar_url || "/xd.webp",
+            },
+            isLiked: false,
+          };
+        })
+      );
     }
 
     void loadPosts();
@@ -40,7 +85,9 @@ export default function RankPage() {
       </header>
 
       <main className="mx-auto max-w-2xl p-2">
-        {posts.length > 0 ? (
+        {loadError ? (
+          <p className="py-12 text-center text-sm text-red-500">{loadError}</p>
+        ) : posts.length > 0 ? (
           <div className="grid grid-cols-3 gap-1">
             {posts.map((post, index) => (
               <button
