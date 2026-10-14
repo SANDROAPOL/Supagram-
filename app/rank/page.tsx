@@ -1,128 +1,148 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+
+import { supabase } from "../lib/client";
 import { HeartIcon } from "../components/Hearticon";
 import Modal from "../components/Modal";
-import type { Post } from "../mocks/posts";
-import { supabase } from "../lib/supabase";
+import { Post } from "../types";
 
 export default function RankPage() {
-  const [posts, setPosts] = useState<Post[]>([]);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function loadPosts() {
-      const { data, error } = await supabase
-        .from("posts")
-        .select()
-        .order("likes", { ascending: false });
+    const fetchPosts = async () => {
+      setIsLoading(true);
+      setLoadError(null);
 
-      if (error) {
-        console.error("No se pudieron cargar los posts del ranking", error);
-        setLoadError("No se pudieron cargar las publicaciones.");
-        return;
-      }
+      try {
+        const { data: postsData, error: postsError } = await supabase
+          .from("posts")
+          .select("id, image_url, caption, user_id, created_at");
 
-      const postRows = (data ?? []) as Array<
-        Omit<Post, "user" | "isLiked"> & { user_id: string }
-      >;
-      const userIds = [...new Set(postRows.map((post) => post.user_id))];
+        if (postsError) throw postsError;
 
-      if (userIds.length === 0) {
-        setPosts([]);
-        return;
-      }
+        if (!postsData.length) {
+          setPosts([]);
+          return;
+        }
 
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, username, avatar_url")
-        .in("id", userIds);
+        const userIds = [...new Set(postsData.map((post) => post.user_id))];
+        const postIds = postsData.map((post) => post.id);
 
-      if (profilesError) {
-        console.error("No se pudieron cargar los perfiles del ranking", profilesError);
-        setLoadError("No se pudieron cargar los perfiles de las publicaciones.");
-        return;
-      }
+        const [
+          { data: profilesData, error: profilesError },
+          { data: likesData, error: likesError },
+        ] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("id, username, avatar_url")
+            .in("id", userIds),
+          supabase
+            .from("likes")
+            .select("post_id")
+            .in("post_id", postIds),
+        ]);
 
-      const profilesById = new Map(
-        (profiles ?? []).map(
-          (profile: { id: string; username: string | null; avatar_url: string | null }) => [
+        if (profilesError) throw profilesError;
+        if (likesError) throw likesError;
+
+        const profilesMap = new Map(
+          profilesData.map((profile) => [
             profile.id,
-            profile,
-          ] as const
-        )
-      );
+            { username: profile.username, avatar_url: profile.avatar_url },
+          ])
+        );
 
-      setPosts(
-        postRows.map((post) => {
-          const profile = profilesById.get(post.user_id);
+        const likesCountMap = new Map<string | number, number>();
+        likesData.forEach((like) => {
+          likesCountMap.set(
+            like.post_id,
+            (likesCountMap.get(like.post_id) ?? 0) + 1
+          );
+        });
 
-          return {
+        const rankedPosts: Post[] = postsData
+          .map((post) => ({
             ...post,
-            user: {
-              username: profile?.username || "Usuario",
-              avatar: profile?.avatar_url || "/xd.webp",
+            profile: profilesMap.get(post.user_id) ?? {
+              username: "usuario",
+              avatar_url: null,
             },
-            isLiked: false,
-          };
-        })
-      );
-    }
+            likes_count: likesCountMap.get(post.id) ?? 0,
+          }))
+          .sort((a, b) => b.likes_count - a.likes_count);
 
-    void loadPosts();
+        setPosts(rankedPosts);
+      } catch (error) {
+        console.error("Error al cargar el ranking:", error);
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : "No se pudo cargar el ranking."
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPosts();
   }, []);
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b border-border bg-card-bg">
-        <div className="mx-auto flex max-w-2xl items-center justify-center px-4 py-3">
-          <h1 className="bg-gradient-to-r from-primary to-accent bg-clip-text text-xl font-bold text-transparent">
+      {/* Header */}
+      <header className="sticky top-0 z-40 bg-card-bg border-b border-border">
+        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-center">
+          <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
             Ranking
           </h1>
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl p-2">
-        {loadError ? (
-          <p className="py-12 text-center text-sm text-red-500">{loadError}</p>
-        ) : posts.length > 0 ? (
+      {/* Grid de posts */}
+      <main className="max-w-2xl mx-auto p-2">
+        {isLoading ? (
+          <p className="py-12 text-center text-foreground/60">Cargando ranking...</p>
+        ) : loadError ? (
+          <p role="alert" className="py-12 text-center text-red-500">
+            No se pudo cargar el ranking: {loadError}
+          </p>
+        ) : posts.length === 0 ? (
+          <p className="py-12 text-center text-foreground/60">
+            Aún no hay publicaciones para mostrar.
+          </p>
+        ) : (
           <div className="grid grid-cols-3 gap-1">
-            {posts.map((post, index) => (
+            {posts.map((post) => (
               <button
                 key={post.id}
-                type="button"
                 onClick={() => setSelectedPost(post)}
-                aria-label={`Ver publicación en puesto ${index + 1}`}
-                className="group relative aspect-square overflow-hidden"
+                className="relative aspect-square overflow-hidden group"
               >
                 <Image
                   src={post.image_url}
-                  alt={`Post con ${post.likes} likes`}
+                  alt={`Post con ${post.likes_count} likes`}
                   fill
-                  sizes="(max-width: 672px) 33vw, 220px"
                   className="object-cover transition-transform group-hover:scale-105"
                 />
-                <span className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-sm font-bold text-white shadow-md">
-                  {index + 1}
-                </span>
-                <span className="absolute inset-0 flex items-center justify-center gap-1 bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-                  <HeartIcon filled />
-                  <span className="font-semibold text-white">
-                    {post.likes.toLocaleString()}
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                  <HeartIcon size="sm" />
+                  <span className="text-white font-semibold">
+                    {post.likes_count.toLocaleString()}
                   </span>
-                </span>
+                </div>
               </button>
             ))}
           </div>
-        ) : (
-          <p className="py-12 text-center text-sm text-foreground/60">
-            Todavía no hay publicaciones para mostrar.
-          </p>
         )}
       </main>
 
+      {/* Modal */}
       {selectedPost && (
         <Modal post={selectedPost} onClose={() => setSelectedPost(null)} />
       )}
